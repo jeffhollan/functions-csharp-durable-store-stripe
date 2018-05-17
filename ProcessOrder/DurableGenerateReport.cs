@@ -71,7 +71,7 @@ namespace ProcessOrder
             TraceWriter log)
         {
             log.Info($"Getting order details for order id: ${transaction.Id}");
-            return new OrderDetails { status = Status.Delivered, orderId = transaction.Id };
+            return new OrderDetails { status = (Status)(transaction.Created.Minute % 4 + 1), orderId = transaction.Id };
         }
 
         private static string EndpointUrl = Environment.GetEnvironmentVariable("EndpointUrl");
