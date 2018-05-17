@@ -7,6 +7,11 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Azure.WebJobs.Host;
 using ProcessOrder.Models;
 using Stripe;
+using System.Net;
+using Microsoft.Azure.Documents;
+using Microsoft.Azure.Documents.Client;
+using Newtonsoft.Json;
+using System;
 
 namespace ProcessOrder
 {
@@ -18,7 +23,7 @@ namespace ProcessOrder
         {
             var tasks = new List<Task<OrderDetails>>();
             var orderTotals = new List<double>();
-            var transactions = await context.CallActivityAsync<IEnumerable<StripeCharge>>("Durable_GetTransactions", null);
+            var transactions = await context.CallActivityAsync<IEnumerable<StripeCharge>>("Durable_GetTransactions", 100);
             
             foreach(var transaction in transactions)
             {
@@ -28,18 +33,22 @@ namespace ProcessOrder
             await Task.WhenAll(tasks);
             return from details in tasks
                    group details by details.Result.status into s
-                   select new { status = s.Key, count = s.Count() };
+                   select new { status = s.Key.ToString(), count = s.Count() };
                    
         }
 
         [FunctionName("Durable_GetTransactions")]
         public static IEnumerable<StripeCharge> GetTransactions(
-            [ActivityTrigger] object maxRecords, 
-            [CosmosDB("store", "orders", ConnectionStringSetting = "CosmosDbConnectionString", SqlQuery = "SELECT top 100  * FROM c")] IEnumerable<dynamic> documents,
+            [ActivityTrigger] double maxRecords, 
             TraceWriter log)
         {
-            log.Info($"Fetched recent documents");
-            return documents as IEnumerable<StripeCharge>;
+            log.Info($"Fetching documents from CosmosDb");
+            var docs = client.CreateDocumentQuery<StripeCharge>(UriFactory.CreateDocumentCollectionUri("store", "orders"), "SELECT top 100  * FROM c");
+            foreach(var doc in docs)
+            {
+                log.Info($"amount: {doc.Amount}");
+            }
+            return docs;
         }
 
         [FunctionName("DurableGenerateReport_HttpStart")]
@@ -64,5 +73,9 @@ namespace ProcessOrder
             log.Info($"Getting order details for order id: ${transaction.Id}");
             return new OrderDetails { status = Status.Delivered, orderId = transaction.Id };
         }
+
+        private static string EndpointUrl = Environment.GetEnvironmentVariable("EndpointUrl");
+        private static string PrimaryKey = Environment.GetEnvironmentVariable("PrimaryKey");
+        private static DocumentClient client = new DocumentClient(new Uri(EndpointUrl), PrimaryKey);
     }
 }
