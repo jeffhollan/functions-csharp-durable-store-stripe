@@ -44,10 +44,6 @@ namespace ProcessOrder
         {
             log.Info($"Fetching documents from CosmosDb");
             var docs = client.CreateDocumentQuery<StripeCharge>(UriFactory.CreateDocumentCollectionUri("store", "orders"), "SELECT top 100  * FROM c");
-            foreach(var doc in docs)
-            {
-                log.Info($"amount: {doc.Amount}");
-            }
             return docs;
         }
 
